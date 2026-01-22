@@ -19,22 +19,30 @@ spec:
       containers:
         - name: jenkins
           image: joanisky/jenkins-with-docker:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               name: http
             - containerPort: 50000
               name: agent
           env:
-            - name: JENKINS_OPTS
-              value: "--httpPort=8080"
+          - name: JENKINS_OPTS
+            value: "--httpPort=8080"
+          - name: JAVA_OPTS
+            value: >-
+              -Xmx2048m
+              -Xms1024m
+              -XX:+UseG1GC
+              -XX:MaxGCPauseMillis=100
+              -XX:+DisableExplicitGC
+              -Dhudson.slaves.NodeProvisioner.initialDelay=0
           resources:
             requests:
-              cpu: "50m"
-              memory: "512Mi"
+              cpu: "300m"
+              memory: "1.5Gi"
             limits:
-              cpu: "800m"
-              memory: "1Gi"
+              cpu: "1000m"
+              memory: "3Gi"
           volumeMounts:
             - name: jenkins-home
               mountPath: /var/jenkins_home
@@ -44,7 +52,7 @@ spec:
             httpGet:
               path: /login
               port: 8080
-            failureThreshold: 30
+            failureThreshold: 40
             periodSeconds: 10
           livenessProbe:
             httpGet:
