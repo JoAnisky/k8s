@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y docker.io curl && \
     install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
     rm kubectl
 
+# Installer Helm
+RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
 RUN groupdel docker || true && \
     groupadd -g 112 docker && \
     usermod -aG docker jenkins
