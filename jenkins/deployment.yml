@@ -19,7 +19,7 @@ spec:
       containers:
         - name: jenkins
           image: joanisky/jenkins-with-docker:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               name: http
