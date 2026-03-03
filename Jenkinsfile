@@ -155,7 +155,7 @@ pipeline {
                         waitUntil {
                             script {
                                 def response = sh(
-                                    script: 'curl -s -o /dev/null -w "%{http_code}" https://grafana.jonathanlore.fr/api/health',
+                                    script: 'curl -4 -s -o /dev/null -w "%{http_code}" https://grafana.jonathanlore.fr/api/health',
                                     returnStdout: true
                                 ).trim()
                                 if (response == '200') {
@@ -174,8 +174,8 @@ pipeline {
                         waitUntil {
                             script {
                                 def response = sh(
-                                    script: 'curl -s -o /dev/null -w "%{http_code}" https://jenkins.jonathanlore.fr/login',
-                                    returnStdout: true
+									script: 'curl -4 -s -o /dev/null -w "%{http_code}" https://jenkins.jonathanlore.fr/login',
+									returnStdout: true
                                 ).trim()
                                 if (response == '200') {
                                     echo "✅ Jenkins accessible"
