@@ -4,5 +4,4 @@ metadata:
   name: jenkins-java-opts
   namespace: jenkins
 data:
-  java-opts: |
-    -Xmx2048m -Xms1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+DisableExplicitGC -Dhudson.slaves.NodeProvisioner.initialDelay=0 -Dhudson.model.DirectoryBrowserSupport.CSP=sandbox allow-same-origin allow-scripts allow-popups allow-downloads; default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; media-src 'self'; font-src 'self'; frame-src 'self' data:;
+  java-opts: "-Xmx2048m -Xms1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+DisableExplicitGC -Dhudson.slaves.NodeProvisioner.initialDelay=0 \"-Dhudson.model.DirectoryBrowserSupport.CSP=sandbox allow-same-origin allow-scripts allow-popups allow-downloads; default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; media-src 'self'; font-src 'self'; frame-src 'self' data:;\""
