@@ -29,7 +29,10 @@ spec:
           - name: JENKINS_OPTS
             value: "--httpPort=8080"
           - name: JAVA_OPTS
-            value: "-Xmx2048m -Xms1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+DisableExplicitGC -Dhudson.slaves.NodeProvisioner.initialDelay=0 -Dhudson.model.DirectoryBrowserSupport.CSP=sandbox\\ allow-same-origin\\ allow-scripts\\ allow-popups\\ allow-downloads;\\ default-src\\ 'self';\\ img-src\\ 'self'\\ data:;"
+            valueFrom:
+              configMapKeyRef:
+                name: jenkins-java-opts
+                key: java-opts
           resources:
             requests:
               cpu: "300m"
