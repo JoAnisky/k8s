@@ -1,5 +1,8 @@
 grafana:
     adminUser: "adminsky"
+    persistence:
+        enabled: true
+        size: 1Gi
     ingress:
         enabled: false
     grafana.ini:
