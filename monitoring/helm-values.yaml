@@ -2,6 +2,10 @@ grafana:
     adminUser: "adminsky"
     ingress:
         enabled: false
+    grafana.ini:
+        server:
+            root_url: "https://grafana.jonathanlore.fr"
+            domain: "grafana.jonathanlore.fr"
 
 prometheus:
     prometheusSpec:
