@@ -49,6 +49,8 @@ spec:
 
                   echo "=== Backup Jenkins terminé ==="
               env:
+                - name: RCLONE_CONFIG_DIR
+                  value: /tmp
                 - name: RESTIC_PASSWORD
                   valueFrom:
                     secretKeyRef:

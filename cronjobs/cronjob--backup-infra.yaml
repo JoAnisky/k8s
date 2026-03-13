@@ -49,6 +49,8 @@ spec:
 
                   echo "=== Backup infra terminé ==="
               env:
+                - name: RCLONE_CONFIG_DIR
+                  value: /tmp
                 - name: RESTIC_PASSWORD
                   valueFrom:
                     secretKeyRef:
