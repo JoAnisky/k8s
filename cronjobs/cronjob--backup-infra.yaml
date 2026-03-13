@@ -1,0 +1,73 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-backup-infra
+  namespace: infra
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: alpine:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  echo "=== [0/3] Installation des outils ==="
+                  apk add --no-cache restic rclone
+
+                  echo "=== [1/3] Restic backup ~/k3s ==="
+                  restic \
+                    -r rclone:gdrive:restic-thetiptop \
+                    --verbose \
+                    backup /infra \
+                    --tag "cronjob,infra"
+
+                  echo "=== [2/3] Politique de rétention ==="
+                  restic \
+                    -r rclone:gdrive:restic-thetiptop \
+                    forget \
+                    --keep-daily 7 \
+                    --keep-weekly 4 \
+                    --keep-monthly 2 \
+                    --tag "infra" \
+                    --prune
+
+                  echo "=== [3/3] Vérification intégrité ==="
+                  restic \
+                    -r rclone:gdrive:restic-thetiptop \
+                    check
+
+                  echo "=== Backup infra terminé ==="
+              env:
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: restic-secret
+                      key: RESTIC_PASSWORD
+                - name: RCLONE_CONFIG
+                  value: /rclone/rclone.conf
+              volumeMounts:
+                - name: rclone-config
+                  mountPath: /rclone
+                  readOnly: true
+                - name: infra-data
+                  mountPath: /infra
+                  readOnly: true
+          volumes:
+            - name: rclone-config
+              secret:
+                secretName: rclone-config
+            - name: infra-data
+              hostPath:
+                path: /home/anisky/k3s
+                type: Directory

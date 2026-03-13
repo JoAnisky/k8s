@@ -1,0 +1,73 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-backup-jenkins
+  namespace: infra
+spec:
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: alpine:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  echo "=== [0/3] Installation des outils ==="
+                  apk add --no-cache restic rclone
+
+                  echo "=== [1/3] Restic backup Jenkins home ==="
+                  restic \
+                    -r rclone:gdrive:restic-thetiptop \
+                    --verbose \
+                    backup /jenkins \
+                    --tag "cronjob,jenkins"
+
+                  echo "=== [2/3] Politique de rétention ==="
+                  restic \
+                    -r rclone:gdrive:restic-thetiptop \
+                    forget \
+                    --keep-daily 7 \
+                    --keep-weekly 4 \
+                    --keep-monthly 2 \
+                    --tag "jenkins" \
+                    --prune
+
+                  echo "=== [3/3] Vérification intégrité ==="
+                  restic \
+                    -r rclone:gdrive:restic-thetiptop \
+                    check
+
+                  echo "=== Backup Jenkins terminé ==="
+              env:
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: restic-secret
+                      key: RESTIC_PASSWORD
+                - name: RCLONE_CONFIG
+                  value: /rclone/rclone.conf
+              volumeMounts:
+                - name: rclone-config
+                  mountPath: /rclone
+                  readOnly: true
+                - name: jenkins-data
+                  mountPath: /jenkins
+                  readOnly: true
+          volumes:
+            - name: rclone-config
+              secret:
+                secretName: rclone-config
+            - name: jenkins-data
+              hostPath:
+                path: /var/lib/rancher/k3s/storage/pvc-3f3990e9-5163-4f42-b763-9f8d3590c505_jenkins_jenkins-home
+                type: Directory

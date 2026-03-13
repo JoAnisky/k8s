@@ -1,0 +1,81 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-backup-git
+  namespace: infra
+spec:
+  schedule: "0 5 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: alpine:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  echo "=== [0/3] Installation des outils ==="
+                  apk add --no-cache restic rclone git
+
+                  echo "=== [1/3] Clone bare des repos GitHub ==="
+                  mkdir -p /git-backup
+
+                  for REPO in the-tip-top-front the-tip-top-api k8s-infra; do
+                    echo "--- Clone $REPO ---"
+                    git clone --bare \
+                      https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/${GITHUB_USER}/${REPO}.git \
+                      /git-backup/${REPO}.git
+                  done
+
+                  echo "=== [2/3] Restic backup ==="
+                  restic \
+                    -r rclone:gdrive:restic-thetiptop \
+                    --verbose \
+                    backup /git-backup \
+                    --tag "cronjob,git"
+
+                  echo "=== [3/3] Politique de rétention ==="
+                  restic \
+                    -r rclone:gdrive:restic-thetiptop \
+                    forget \
+                    --keep-daily 7 \
+                    --keep-weekly 4 \
+                    --keep-monthly 2 \
+                    --tag "git" \
+                    --prune
+
+                  echo "=== Backup Git terminé ==="
+              env:
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: restic-secret
+                      key: RESTIC_PASSWORD
+                - name: RCLONE_CONFIG
+                  value: /rclone/rclone.conf
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: github-token
+                      key: GITHUB_TOKEN
+                - name: GITHUB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: github-token
+                      key: GITHUB_USER
+              volumeMounts:
+                - name: rclone-config
+                  mountPath: /rclone
+                  readOnly: true
+          volumes:
+            - name: rclone-config
+              secret:
+                secretName: rclone-config

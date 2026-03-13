@@ -117,7 +117,31 @@ pipeline {
                 }
             }
         }
+		// ─────────────────────────────────────────────
+		// BACKUPS (Git, Infra, Jenkins)
+		// ─────────────────────────────────────────────
 
+		stage('Deploy Backups') {
+			when { expression { env.GIT_BRANCH == 'origin/main' } }
+			steps {
+				withCredentials([
+					file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')
+				]) {
+					sh '''
+						export KUBECONFIG=$KUBECONFIG_FILE
+
+						echo "=== Namespace infra ==="
+						kubectl apply -f infra/namespace-infra.yaml
+
+						echo "=== CronJobs backup ==="
+						kubectl apply -k cronjobs
+
+						echo "=== CronJobs déployés ==="
+						kubectl get cronjobs -n infra
+					'''
+				}
+			}
+		}
         // ─────────────────────────────────────────────
         // VÉRIFICATION
         // ─────────────────────────────────────────────
