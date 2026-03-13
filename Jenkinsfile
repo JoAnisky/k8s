@@ -220,14 +220,27 @@ pipeline {
         always {
             cleanWs()
         }
-        success {
-            echo "✅ Infrastructure déployée avec succès !"
-            echo "🔧 Jenkins  : https://jenkins.jonathanlore.fr"
-            echo "📊 Grafana  : https://grafana.jonathanlore.fr"
-            echo "🌐 Traefik  : https://traefik.jonathanlore.fr"
-        }
-        failure {
-            echo "❌ Pipeline infra échoué — vérifier les logs ci-dessus"
-        }
+		success {
+			withCredentials([string(credentialsId: 'discord-webhook-url', variable: 'DISCORD_URL')]) {
+				discordSend(
+					webhookURL: DISCORD_URL,
+					title: "✅ Infrastructure déployée avec succès !",
+					link: env.BUILD_URL,
+					result: 'SUCCESS',
+					description: "Le build #${env.BUILD_NUMBER} a été déployé avec succès sur Kubernetes.\n**Branche:** ${env.GIT_BRANCH_NAME}"
+				)
+			}
+		}
+		failure {
+			withCredentials([string(credentialsId: 'discord-webhook-url', variable: 'DISCORD_URL')]) {
+				discordSend(
+					webhookURL: DISCORD_URL,
+					title: "❌ Pipeline infra échoué — vérifier les logs ci-dessus",
+					link: env.BUILD_URL,
+					result: 'FAILURE',
+					description: "Le build #${env.BUILD_NUMBER} a échoué. \nConsulte les logs ici : ${env.BUILD_URL}console"
+				)
+			}
+		}
     }
 }

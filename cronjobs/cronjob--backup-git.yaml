@@ -28,7 +28,7 @@ spec:
                   echo "=== [1/3] Clone bare des repos GitHub ==="
                   mkdir -p /git-backup
 
-                  for REPO in the-tip-top-front the-tip-top-api k8s-infra; do
+                  for REPO in the-tip-top-front the-tip-top-api k8s; do
                     echo "--- Clone $REPO ---"
                     git clone --bare \
                       https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/${GITHUB_USER}/${REPO}.git \
