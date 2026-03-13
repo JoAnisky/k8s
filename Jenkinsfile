@@ -11,9 +11,9 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                script {
-                    echo "Build: ${BUILD_NUMBER} — Branch: ${env.GIT_BRANCH}"
-                }
+				script {
+					env.GIT_BRANCH_NAME = env.GIT_BRANCH ?: scm.branches[0].name
+				}
             }
         }
 
