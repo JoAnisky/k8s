@@ -67,6 +67,8 @@ Les secrets suivants doivent exister dans le namespace `infra` (créés manuelle
 - `the-tip-top-front`
 - `the-tip-top-api`
 - `k8s`
+
+
 ## Restauration Jenkins
 
 ### 1. Lister les snapshots disponibles
@@ -136,4 +138,74 @@ kubectl get pods -n jenkins -w
 ### 5. Nettoyer
 ```bash
 kubectl delete pod restic-restore -n infra
+```
+
+## Restauration infra K3s
+
+### 1. Lister les snapshots disponibles
+
+```bash
+kubectl create job --from=cronjob/restic-backup-infra list-snapshots-infra -n infra
+kubectl logs -n infra -l job-name=list-snapshots-infra -f
+```
+
+Noter l'ID du snapshot à restaurer - choisir le plus récent pris **avant** l'incident.
+
+Nettoyer le job une fois terminé :
+
+```bash
+kubectl delete job list-snapshots-infra -n infra
+```
+
+### 2. Lancer la restauration
+
+Remplacer `<SNAPSHOT_ID>` par l'ID noté à l'étape 1 :
+
+```bash
+kubectl run restic-restore-infra \
+  --image=alpine:latest \
+  --restart=Never \
+  -n infra \
+  --overrides='{
+    "spec": {
+      "containers": [{
+        "name": "restic-restore-infra",
+        "image": "alpine:latest",
+        "command": ["/bin/sh", "-c", "apk add --no-cache restic rclone && mkdir -p /root/.config/rclone && cp /rclone/rclone.conf /root/.config/rclone/rclone.conf && restic -r rclone:gdrive:restic-thetiptop restore <SNAPSHOT_ID> --target / --include /infra && echo RESTAURATION OK"],
+        "env": [
+          {"name": "RESTIC_PASSWORD", "valueFrom": {"secretKeyRef": {"name": "restic-secret", "key": "RESTIC_PASSWORD"}}}
+        ],
+        "volumeMounts": [
+          {"name": "rclone-config", "mountPath": "/rclone", "readOnly": true},
+          {"name": "infra-data", "mountPath": "/infra"}
+        ]
+      }],
+      "volumes": [
+        {"name": "rclone-config", "secret": {"secretName": "rclone-config"}},
+        {"name": "infra-data", "hostPath": {"path": "/home/anisky/k3s", "type": "Directory"}}
+      ]
+    }
+  }'
+```
+
+Suivre les logs :
+
+```bash
+kubectl logs -n infra restic-restore-infra -f
+```
+
+Le message `RESTAURATION OK` confirme le succès.
+
+### 3. Vérifier
+
+```bash
+ls ~/k3s/
+```
+
+> ⚠️ Restic ne supprime pas les fichiers existants lors d'une restauration - il rajoute uniquement ce qui manque. Supprimer manuellement les fichiers indésirables si nécessaire.
+
+### 4. Nettoyer
+
+```bash
+kubectl delete pod restic-restore-infra -n infra
 ```
