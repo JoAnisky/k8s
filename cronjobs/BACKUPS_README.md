@@ -67,3 +67,73 @@ Les secrets suivants doivent exister dans le namespace `infra` (créés manuelle
 - `the-tip-top-front`
 - `the-tip-top-api`
 - `k8s`
+## Restauration Jenkins
+
+### 1. Lister les snapshots disponibles
+
+Déclencher un job one-shot pour afficher l'historique des snapshots :
+```bash
+kubectl create job --from=cronjob/restic-backup-jenkins list-snapshots -n infra
+kubectl logs -n infra -l job-name=list-snapshots -f
+```
+
+Noter l'ID du snapshot à restaurer (ex: `1ab7877c`).
+
+Nettoyer le job une fois terminé :
+```bash
+kubectl delete job list-snapshots -n infra
+```
+
+### 2. Arrêter Jenkins
+```bash
+kubectl scale deployment jenkins -n jenkins --replicas=0
+kubectl get pods -n jenkins -w  # attendre que le pod disparaisse
+```
+
+### 3. Lancer la restauration
+
+Remplacer `<SNAPSHOT_ID>` par l'ID noté à l'étape 1 :
+```bash
+kubectl run restic-restore \
+  --image=alpine:latest \
+  --restart=Never \
+  -n infra \
+  --overrides='{
+    "spec": {
+      "containers": [{
+        "name": "restic-restore",
+        "image": "alpine:latest",
+        "command": ["/bin/sh", "-c", "apk add --no-cache restic rclone && mkdir -p /root/.config/rclone && cp /rclone/rclone.conf /root/.config/rclone/rclone.conf && restic -r rclone:gdrive:restic-thetiptop restore  --target / --include /jenkins && echo RESTAURATION OK"],
+        "env": [
+          {"name": "RESTIC_PASSWORD", "valueFrom": {"secretKeyRef": {"name": "restic-secret", "key": "RESTIC_PASSWORD"}}}
+        ],
+        "volumeMounts": [
+          {"name": "rclone-config", "mountPath": "/rclone", "readOnly": true},
+          {"name": "jenkins-data", "mountPath": "/jenkins"}
+        ]
+      }],
+      "volumes": [
+        {"name": "rclone-config", "secret": {"secretName": "rclone-config"}},
+        {"name": "jenkins-data", "hostPath": {"path": "/var/lib/rancher/k3s/storage/pvc-3f3990e9-5163-4f42-b763-9f8d3590c505_jenkins_jenkins-home", "type": "Directory"}}
+      ]
+    }
+  }'
+```
+
+Suivre les logs :
+```bash
+kubectl logs -n infra restic-restore -f
+```
+
+Le message `RESTAURATION OK` confirme le succès.
+
+### 4. Relancer Jenkins
+```bash
+kubectl scale deployment jenkins -n jenkins --replicas=1
+kubectl get pods -n jenkins -w
+```
+
+### 5. Nettoyer
+```bash
+kubectl delete pod restic-restore -n infra
+```
