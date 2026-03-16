@@ -209,3 +209,87 @@ ls ~/k3s/
 ```bash
 kubectl delete pod restic-restore-infra -n infra
 ```
+
+## Restauration Git
+
+Les dépôts GitHub sont sauvegardés sous forme de **bare clones** dans le repo Restic.
+En cas de perte d'accès à GitHub, ils peuvent être restaurés et clonés localement.
+
+### 1. Lister les snapshots disponibles
+
+```bash
+kubectl create job --from=cronjob/restic-backup-git list-snapshots-git -n infra
+kubectl logs -n infra -l job-name=list-snapshots-git -f
+```
+
+Noter l'ID du snapshot à restaurer — choisir le plus récent pris **avant** l'incident.
+
+Nettoyer le job une fois terminé :
+
+```bash
+kubectl delete job list-snapshots-git -n infra
+```
+
+### 2. Lancer la restauration
+
+Remplacer `<SNAPSHOT_ID>` par l'ID noté à l'étape 1 :
+
+```bash
+kubectl run restic-restore-git \
+  --image=alpine:latest \
+  --restart=Never \
+  -n infra \
+  --overrides='{
+    "spec": {
+      "containers": [{
+        "name": "restic-restore-git",
+        "image": "alpine:latest",
+        "command": ["/bin/sh", "-c", "apk add --no-cache restic rclone git && mkdir -p /root/.config/rclone && cp /rclone/rclone.conf /root/.config/rclone/rclone.conf && restic -r rclone:gdrive:restic-thetiptop restore <SNAPSHOT_ID> --target / --include /git-backup && echo RESTAURATION OK && ls /git-backup/"],
+        "env": [
+          {"name": "RESTIC_PASSWORD", "valueFrom": {"secretKeyRef": {"name": "restic-secret", "key": "RESTIC_PASSWORD"}}}
+        ],
+        "volumeMounts": [
+          {"name": "rclone-config", "mountPath": "/rclone", "readOnly": true},
+          {"name": "restore-target", "mountPath": "/git-backup"}
+        ]
+      }],
+      "volumes": [
+        {"name": "rclone-config", "secret": {"secretName": "rclone-config"}},
+        {"name": "restore-target", "hostPath": {"path": "/home/anisky/git-restore", "type": "DirectoryOrCreate"}}
+      ]
+    }
+  }'
+```
+
+Suivre les logs :
+
+```bash
+kubectl logs -n infra restic-restore-git -f
+```
+
+Le message `RESTAURATION OK` suivi de la liste des repos confirme le succès.
+
+### 3. Extraire le code depuis un bare clone
+
+Les bare clones sont restaurés dans `/home/anisky/git-restore/`. Pour récupérer le code :
+
+```bash
+# Autoriser git à accéder au répertoire (créé par root via le pod)
+git config --global --add safe.directory /home/anisky/git-restore/<repo>.git
+
+# Cloner depuis le bare clone local
+git clone /home/anisky/git-restore/<repo>.git <destination>
+
+# Exemple
+git clone /home/anisky/git-restore/the-tip-top-front.git the-tip-top-front-restored
+```
+
+### 4. Nettoyer
+
+```bash
+kubectl delete pod restic-restore-git -n infra
+
+# sudo requis car les fichiers ont été créés par root (pod Alpine)
+sudo rm -rf ~/git-restore
+sudo rm -rf ~/<destination>
+```
