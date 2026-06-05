@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: matomo
+  namespace: matomo
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: matomo
+  template:
+    metadata:
+      labels:
+        app: matomo
+    spec:
+      containers:
+        - name: matomo
+          image: matomo:5
+          ports:
+            - containerPort: 80
+          env:
+            - name: MATOMO_DATABASE_HOST
+              value: "matomo-db"
+            - name: MATOMO_DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: matomo-db-secret
+                  key: MARIADB_USER
+            - name: MATOMO_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: matomo-db-secret
+                  key: MARIADB_PASSWORD
+            - name: MATOMO_DATABASE_DBNAME
+              valueFrom:
+                secretKeyRef:
+                  name: matomo-db-secret
+                  key: MARIADB_DATABASE
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: matomo-data
+              mountPath: /var/www/html
+          startupProbe:
+            httpGet:
+              path: /matomo.php
+              port: 80
+            failureThreshold: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /matomo.php
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /matomo.php
+              port: 80
+            initialDelaySeconds: 20
+            periodSeconds: 5
+      volumes:
+        - name: matomo-data
+          persistentVolumeClaim:
+            claimName: matomo-data
