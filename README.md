@@ -29,6 +29,17 @@ k8s/
 ├── infra/
 │   └── namespace-infra.yaml        ← namespace `infra` (CronJobs, backups)
 │
+├── matomo/
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   ├── pvc-db.yaml                 ← stockage MariaDB (5Gi)
+│   ├── pvc-matomo.yaml             ← stockage Matomo /var/www/html (5Gi)
+│   ├── deployment-db.yaml          ← MariaDB 10.11
+│   ├── service-db.yaml
+│   ├── deployment-matomo.yaml      ← Matomo 5
+│   ├── service-matomo.yaml
+│   └── ingress.yaml                ← matomo.jonathanlore.fr
+│
 ├── cronjobs/
 │   ├── kustomization.yaml
 │   ├── cronjob--backup-git.yaml    ← bare clone des dépôts GitHub → Restic
@@ -52,6 +63,7 @@ k8s/
 | Jenkins | https://jenkins.jonathanlore.fr | `jenkins` |
 | Grafana | https://grafana.jonathanlore.fr | `monitoring` |
 | Traefik | https://traefik.jonathanlore.fr | `kube-system` |
+| Matomo | https://matomo.jonathanlore.fr | `matomo` |
 
 ## Déploiement automatisé
 
@@ -61,10 +73,11 @@ Tout push sur `main` déclenche le pipeline Jenkins qui :
 2. **Build Jenkins Image** — build `joanisky/jenkins-with-docker:latest` et push sur Docker Hub
 3. **Deploy Jenkins** — via `kubectl apply -k jenkins/`
 4. **Deploy Monitoring Stack** — via Helm (`kube-prometheus-stack`) + manifests
-5. **Deploy Backups** — namespace `infra` + CronJobs Restic
-6. **Verify** — état des pods et des ingress
-7. **Health Checks** — attend que Grafana et Jenkins répondent (timeout 3 min)
-8. **Notification Discord** — succès ou échec envoyé sur Discord
+5. **Deploy Matomo** — Matomo + MariaDB via `kubectl apply -k matomo/`
+6. **Deploy Backups** — namespace `infra` + CronJobs Restic
+7. **Verify** — état des pods et des ingress
+8. **Health Checks** — attend que Grafana et Jenkins répondent (timeout 3 min)
+9. **Notification Discord** — succès ou échec envoyé sur Discord
 
 ### Credentials Jenkins requis
 
@@ -75,6 +88,28 @@ Tout push sur `main` déclenche le pipeline Jenkins qui :
 | `GRAFANA_ADMIN_USER` | Secret text | Login Grafana |
 | `GRAFANA_ADMIN_PASSWORD` | Secret text | Mot de passe Grafana |
 | `discord-webhook-url` | Secret text | Notifications Discord |
+
+## Matomo — premier déploiement
+
+Le secret de base de données doit être créé **manuellement une seule fois** avant le premier déploiement (jamais versionné) :
+
+```bash
+kubectl create namespace matomo --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic matomo-db-secret \
+  --from-literal=MARIADB_ROOT_PASSWORD=<mot_de_passe_root> \
+  --from-literal=MARIADB_DATABASE=matomo \
+  --from-literal=MARIADB_USER=matomo \
+  --from-literal=MARIADB_PASSWORD=<mot_de_passe_user> \
+  --namespace matomo
+```
+
+Après déploiement, ouvrir https://matomo.jonathanlore.fr pour lancer l'installeur web :
+- **Hôte DB** : `matomo-db`
+- **Port** : `3306`
+- **Nom BDD** / **Utilisateur** / **Mot de passe** : les valeurs du secret ci-dessus
+
+La configuration est persistée dans le PVC `matomo-data` — l'installeur ne se relance pas après un redémarrage de pod.
 
 ## Sauvegardes automatisées
 
@@ -120,6 +155,9 @@ helm upgrade --install kube-prometheus-stack \
   --values monitoring/helm-values.yaml \
   --set grafana.adminPassword='<MOT_DE_PASSE>' \
   --wait --timeout 5m
+
+# Matomo
+kubectl apply -k matomo/
 
 # Backups
 kubectl apply -f infra/namespace-infra.yaml
