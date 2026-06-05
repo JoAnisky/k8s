@@ -12,6 +12,9 @@ grafana:
 
 prometheus:
     prometheusSpec:
+        # SÉCURITÉ DISQUE : Limite la rétention des données
+        retention: 7d
+        retentionSize: 10Gi
         # Découverte cross-namespace (surveille the-tip-top-api)
         podMonitorNamespaceSelector: { }
         serviceMonitorNamespaceSelector: { }
