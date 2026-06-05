@@ -117,6 +117,32 @@ pipeline {
                 }
             }
         }
+        // ─────────────────────────────────────────────
+        // MATOMO
+        // ─────────────────────────────────────────────
+
+        stage('Deploy Matomo') {
+            when { expression { env.GIT_BRANCH == 'origin/main' } }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')
+                ]) {
+                    sh '''
+                        export KUBECONFIG=$KUBECONFIG_FILE
+
+                        echo "=== Matomo ==="
+                        kubectl apply -k matomo/
+                        kubectl rollout status deployment/matomo-db \
+                            -n matomo \
+                            --timeout=120s
+                        kubectl rollout status deployment/matomo \
+                            -n matomo \
+                            --timeout=120s
+                    '''
+                }
+            }
+        }
+
 		// ─────────────────────────────────────────────
 		// BACKUPS (Git, Infra, Jenkins)
 		// ─────────────────────────────────────────────
