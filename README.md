@@ -1,4 +1,4 @@
-# 🏗️ Infrastructure K3s — jonathanlore.fr
+# Infrastructure K3s — jonathanlore.fr
 
 Ce repo centralise toute l'infrastructure Kubernetes du VPS.
 Le déploiement est automatisé via le **Jenkinsfile** à la racine.
@@ -6,16 +6,19 @@ Le déploiement est automatisé via le **Jenkinsfile** à la racine.
 ## Structure
 
 ```
-k8s-infra/
-├── Jenkinsfile                 ← pipeline CI/CD de l'infra
-├── Dockerfile                  ← image Jenkins custom (Docker + kubectl + Helm)
+k8s/
+├── Jenkinsfile                     ← pipeline CI/CD de l'infra
+├── deploy.sh                       ← déploiement manuel Jenkins
+├── reset.sh                        ← suppression/réinitialisation Jenkins
 ├── README.md
 │
 ├── traefik/
-│   ├── traefik-config.yaml     ← configuration Traefik (Let's Encrypt, entrypoints)
-│   └── dashboard-ingress.yaml  ← exposition du dashboard Traefik
+│   ├── traefik-config.yaml         ← configuration Traefik (Let's Encrypt, entrypoints)
+│   └── dashboard-ingress.yaml      ← exposition du dashboard Traefik
 │
 ├── jenkins/
+│   ├── Dockerfile                  ← image Jenkins custom (Docker + kubectl + Helm)
+│   ├── configmap.yaml              ← options JVM Jenkins
 │   ├── kustomization.yml
 │   ├── namespace.yml
 │   ├── pvc.yml
@@ -23,12 +26,23 @@ k8s-infra/
 │   ├── service.yml
 │   └── ingress.yml
 │
+├── infra/
+│   └── namespace-infra.yaml        ← namespace `infra` (CronJobs, backups)
+│
+├── cronjobs/
+│   ├── kustomization.yaml
+│   ├── cronjob--backup-git.yaml    ← bare clone des dépôts GitHub → Restic
+│   ├── cronjob--backup-infra.yaml  ← manifestes K3s → Restic
+│   ├── cronjob--backup-jenkins.yaml← PV Jenkins → Restic
+│   └── BACKUPS_README.md           ← documentation complète des backups et restaurations
+│
 └── monitoring/
     ├── kustomization.yaml
     ├── namespace.yaml
-    ├── helm-values.yaml        ← config kube-prometheus-stack (sans secrets)
+    ├── helm-values.yaml            ← config kube-prometheus-stack (sans secrets)
     ├── ingress-grafana.yaml
-    └── README.md               ← documentation détaillée de la stack monitoring
+    ├── GRAFANA_DASHBOARDS.md       ← référence des dashboards et quand les utiliser
+    └── README.md                   ← documentation détaillée de la stack monitoring
 ```
 
 ## Services exposés
@@ -43,25 +57,52 @@ k8s-infra/
 
 Tout push sur `main` déclenche le pipeline Jenkins qui :
 
-1. **Build** l'image Jenkins custom et la push sur Docker Hub
-2. **Déploie Traefik** — config Let's Encrypt + dashboard ingress
-3. **Déploie Jenkins** — via `kubectl apply -k jenkins/`
-4. **Déploie la stack Monitoring** — via Helm (`kube-prometheus-stack`) + manifests
-5. **Vérifie** l'état des pods et des ingress
-6. **Health checks** — attend que Grafana et Jenkins répondent
+1. **Deploy Traefik** — config Let's Encrypt + dashboard ingress
+2. **Build Jenkins Image** — build `joanisky/jenkins-with-docker:latest` et push sur Docker Hub
+3. **Deploy Jenkins** — via `kubectl apply -k jenkins/`
+4. **Deploy Monitoring Stack** — via Helm (`kube-prometheus-stack`) + manifests
+5. **Deploy Backups** — namespace `infra` + CronJobs Restic
+6. **Verify** — état des pods et des ingress
+7. **Health Checks** — attend que Grafana et Jenkins répondent (timeout 3 min)
+8. **Notification Discord** — succès ou échec envoyé sur Discord
 
 ### Credentials Jenkins requis
 
 | ID | Type | Usage |
 |---|---|---|
-| `jenkins-dockerhub` | Username/Password | Push image Docker |
+| `jenkins-dockerhub` | Username/Password | Push image Docker Hub |
 | `kubeconfig` | File | Accès au cluster K3s |
 | `GRAFANA_ADMIN_USER` | Secret text | Login Grafana |
 | `GRAFANA_ADMIN_PASSWORD` | Secret text | Mot de passe Grafana |
+| `discord-webhook-url` | Secret text | Notifications Discord |
+
+## Sauvegardes automatisées
+
+Les backups tournent dans le namespace `infra` via des CronJobs Kubernetes.
+Tous les snapshots sont envoyés sur Google Drive via **Restic + rclone**.
+
+| CronJob | Heure | Ce qui est sauvegardé |
+|---|---|---|
+| `restic-backup-git` | 05h00 | Bare clones des dépôts GitHub |
+| `restic-backup-infra` | 03h00 | Manifestes K3s (`~/k3s/` sur le VPS) |
+| `restic-backup-jenkins` | 04h00 | PersistentVolume Jenkins |
+
+Voir `cronjobs/BACKUPS_README.md` pour les procédures de restauration complètes.
+
+### Secrets Kubernetes requis dans le namespace `infra`
+
+Ces secrets doivent être créés manuellement (jamais versionnés) :
+
+| Secret | Clé | Contenu |
+|---|---|---|
+| `restic-secret` | `RESTIC_PASSWORD` | Mot de passe du dépôt Restic |
+| `rclone-config` | `rclone.conf` | Configuration rclone (token Google Drive) |
+| `github-token` | `GITHUB_TOKEN` | Personal Access Token GitHub (read-only) |
+| `github-token` | `GITHUB_USER` | Nom d'utilisateur GitHub |
 
 ## Déploiement manuel (urgence)
 
-Si Jenkins est indisponible, les commandes manuelles sont :
+Si Jenkins est indisponible :
 
 ```bash
 # Traefik
@@ -79,6 +120,10 @@ helm upgrade --install kube-prometheus-stack \
   --values monitoring/helm-values.yaml \
   --set grafana.adminPassword='<MOT_DE_PASSE>' \
   --wait --timeout 5m
+
+# Backups
+kubectl apply -f infra/namespace-infra.yaml
+kubectl apply -k cronjobs/
 ```
 
 ## Ajouter le monitoring d'un nouveau projet
@@ -111,9 +156,15 @@ kubectl get pods -n monitoring
 kubectl rollout status deployment/kube-prometheus-stack-grafana -n monitoring
 ```
 
+**CronJob backup en échec :**
+```bash
+kubectl get cronjobs -n infra
+kubectl get jobs -n infra
+kubectl logs -n infra -l job-name=<nom-du-job>
+```
+
 **Reset complet Jenkins :**
 ```bash
-kubectl delete namespace jenkins --ignore-not-found=true
-sleep 15
+./reset.sh
 kubectl apply -k jenkins/
 ```
