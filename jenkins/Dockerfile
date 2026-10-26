@@ -2,9 +2,12 @@ FROM jenkins/jenkins:lts-jdk21
 
 USER root
 
+# kubectl : version du cluster K3s (écart de version max. d'une mineure), à mettre à jour avec K3s
+ARG KUBECTL_VERSION=v1.33.5
+
 # Installer Docker CLI et kubectl
 RUN apt-get update && apt-get install -y docker.io curl && \
-    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" && \
     install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
     rm kubectl
 
