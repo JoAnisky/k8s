@@ -1,5 +1,26 @@
 pipeline {
-    agent any
+    agent {
+        kubernetes {
+            defaultContainer 'tools'
+            yaml '''
+                spec:
+                  containers:
+                    - name: tools
+                      image: joanisky/jenkins-with-docker:latest
+                      imagePullPolicy: IfNotPresent
+                      command: [cat]
+                      tty: true
+                      volumeMounts:
+                        - name: docker-socket
+                          mountPath: /var/run/docker.sock
+                  volumes:
+                    - name: docker-socket
+                      hostPath:
+                        path: /var/run/docker.sock
+                        type: Socket
+            '''
+        }
+    }
 
     environment {
         MONITORING_NAMESPACE = "monitoring"
