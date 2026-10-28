@@ -70,7 +70,7 @@ pipeline {
                     usernamePassword(credentialsId: 'jenkins-dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')
                 ]) {
                     sh '''
-                        docker login -u $DOCKER_USER -p $DOCKER_PASS
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                         docker build -t joanisky/jenkins-with-docker:latest jenkins/
                         docker push joanisky/jenkins-with-docker:latest
                     '''
